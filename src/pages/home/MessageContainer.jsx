@@ -136,7 +136,12 @@ const MessageContainer = ({ selectedUser, socket }) => {
   };
 
   const createPeerConnection = () => {
-    const pc = new RTCPeerConnection();
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+      ],
+    });
+    
   
     const incomingStream = new MediaStream();
     setRemoteStream(incomingStream); // Set only once
@@ -162,39 +167,32 @@ const MessageContainer = ({ selectedUser, socket }) => {
   };
   
 
- const handleCallAnswer = async (offer) => {
-  setIsCalling(true);
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: offer.isVideo,
-    audio: true,
-  });
-  setLocalStream(stream);
-  if (videoRef.current) videoRef.current.srcObject = stream;
-
-  peerConnection.current = createPeerConnection();
-  stream.getTracks().forEach((track) => {
-    peerConnection.current.addTrack(track, stream);
-  });
-
-  await peerConnection.current.setRemoteDescription(offer.offer);
-  const answer = await peerConnection.current.createAnswer();
-  await peerConnection.current.setLocalDescription(answer);
-
-  socket.emit("make-answer", {
-    to: offer.from,
-    from: senderId,
-    answer,
-  });
-
-  // Adding remote stream to the remote video element
-  peerConnection.current.ontrack = (event) => {
-    const remoteStream = new MediaStream();
-    remoteStream.addTrack(event.track);
-    setRemoteStream(remoteStream);
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+  const handleCallAnswer = async (offer) => {
+    setIsCalling(true);
+  
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: offer.isVideo,
+      audio: true,
+    });
+    setLocalStream(stream);
+    if (videoRef.current) videoRef.current.srcObject = stream;
+  
+    peerConnection.current = createPeerConnection(); // sets up `ontrack` handler
+    stream.getTracks().forEach((track) => {
+      peerConnection.current.addTrack(track, stream);
+    });
+  
+    await peerConnection.current.setRemoteDescription(offer.offer);
+    const answer = await peerConnection.current.createAnswer();
+    await peerConnection.current.setLocalDescription(answer);
+  
+    socket.emit("make-answer", {
+      to: offer.from,
+      from: senderId,
+      answer,
+    });
   };
-};
+  
 
 
   const handleDisconnect = () => {
