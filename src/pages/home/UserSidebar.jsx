@@ -45,7 +45,7 @@ const UserSidebar = ({ setSelectedUser, socket }) => {
    // Logout function
    const handleLogout = async () => {
     try {
-      await axios.post("http://localhost:5000/users/logout"); // Adjust API URL
+      await axios.post("https://firefly-api.onrender.com/users/logout"); // Adjust API URL
       localStorage.removeItem("token");
       localStorage.removeItem("userData");
       setTimeout(() => navigate("/login"), 1500);

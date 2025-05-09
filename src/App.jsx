@@ -22,7 +22,7 @@ import UserSidebar from "./pages/home/UserSidebar";
 import MessageContainer from "./pages/home/MessageContainer";
 
 // ✅ Connect to your backend
-const socket = io("http://localhost:5000", {
+const socket = io("https://firefly-api.onrender.com", {
   transports: ["websocket"], 
 });
 
