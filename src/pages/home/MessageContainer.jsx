@@ -137,14 +137,17 @@ const MessageContainer = ({ selectedUser, socket }) => {
 
   const createPeerConnection = () => {
     const pc = new RTCPeerConnection();
-
+  
+    const incomingStream = new MediaStream();
+    setRemoteStream(incomingStream); // Set only once
+  
     pc.ontrack = (event) => {
-      const remoteStream = new MediaStream();
-      remoteStream.addTrack(event.track);
-      setRemoteStream(remoteStream);
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+      incomingStream.addTrack(event.track); // Add track to same stream
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = incomingStream;
+      }
     };
-
+  
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit("ice-candidate", {
@@ -154,9 +157,10 @@ const MessageContainer = ({ selectedUser, socket }) => {
         });
       }
     };
-
+  
     return pc;
   };
+  
 
  const handleCallAnswer = async (offer) => {
   setIsCalling(true);
@@ -346,22 +350,28 @@ const MessageContainer = ({ selectedUser, socket }) => {
 
       {/* Call UI */}
       {isCalling && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50">
-          <div className="bg-white p-4 rounded-xl shadow-lg flex flex-col items-center space-y-3">
-            <video ref={videoRef} autoPlay muted className="w-72 h-40 rounded-lg" />
-            {isVideoCall && (
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                className="w-72 h-40 rounded-lg"
-              />
-            )}
-            <button className="btn btn-error mt-2" onClick={handleDisconnect}>
-              End Call
-            </button>
-          </div>
-        </div>
+  <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50">
+    <div className="bg-white p-4 rounded-xl shadow-lg flex flex-col items-center space-y-3">
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        className="w-72 h-40 rounded-lg border border-blue-500"
+      />
+      {isVideoCall && (
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          className="w-72 h-40 rounded-lg border border-green-500"
+        />
       )}
+      <button onClick={handleDisconnect} className="btn btn-error mt-4">
+        End Call
+      </button>
+    </div>
+  </div>
+)}
+
     </div>
   );
 };
