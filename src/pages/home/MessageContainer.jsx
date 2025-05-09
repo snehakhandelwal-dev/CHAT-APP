@@ -13,8 +13,6 @@ const MessageContainer = ({ selectedUser, socket }) => {
 
   const [isCalling, setIsCalling] = useState(false);
   const [isVideoCall, setIsVideoCall] = useState(false);
-  const [incomingCall, setIncomingCall] = useState(false);
-
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const peerConnection = useRef(null);
@@ -25,6 +23,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
   const senderData = JSON.parse(localStorage.getItem("userData") || "{}");
   const senderId = senderData?.user?._id;
 
+  // Fetch previous messages
   useEffect(() => {
     if (!selectedUser) return;
 
@@ -42,6 +41,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
     fetchMessages();
   }, [selectedUser]);
 
+  // Receive messages
   useEffect(() => {
     if (!socket || !selectedUser) return;
 
@@ -58,6 +58,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
     return () => socket.off("receive-message", handleReceive);
   }, [socket, selectedUser]);
 
+  // Typing preview
   useEffect(() => {
     if (!socket || !selectedUser) return;
 
@@ -107,6 +108,33 @@ const MessageContainer = ({ selectedUser, socket }) => {
     }
   };
 
+  const createPeerConnection = () => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    const incomingStream = new MediaStream();
+    setRemoteStream(incomingStream);
+
+    pc.ontrack = (event) => {
+      event.streams[0]
+        ? (remoteVideoRef.current.srcObject = event.streams[0])
+        : incomingStream.addTrack(event.track);
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("ice-candidate", {
+          to: selectedUser._id,
+          from: senderId,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    return pc;
+  };
+
   const startCall = async (isVideo) => {
     setIsVideoCall(isVideo);
     setIsCalling(true);
@@ -117,7 +145,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
     });
 
     setLocalStream(stream);
-    if (videoRef.current) videoRef.current.srcObject = stream;
+    videoRef.current.srcObject = stream;
 
     peerConnection.current = createPeerConnection();
     stream.getTracks().forEach((track) => {
@@ -132,82 +160,44 @@ const MessageContainer = ({ selectedUser, socket }) => {
       from: senderId,
       isVideo,
       offer,
+      fromName: senderData.user?.fullName,
     });
   };
 
-  const createPeerConnection = () => {
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-      ],
-    });
-    
-  
-    const incomingStream = new MediaStream();
-    setRemoteStream(incomingStream); // Set only once
-  
-    pc.ontrack = (event) => {
-      incomingStream.addTrack(event.track); // Add track to same stream
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = incomingStream;
-      }
-    };
-  
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("ice-candidate", {
-          to: selectedUser._id,
-          from: senderId,
-          candidate: event.candidate,
-        });
-      }
-    };
-  
-    return pc;
-  };
-  
-
-  const handleCallAnswer = async (offer) => {
+  const handleCallAnswer = async (data) => {
     setIsCalling(true);
-  
+    setIsVideoCall(data.isVideo);
+
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: offer.isVideo,
+      video: data.isVideo,
       audio: true,
     });
+
     setLocalStream(stream);
-    if (videoRef.current) videoRef.current.srcObject = stream;
-  
-    peerConnection.current = createPeerConnection(); // sets up `ontrack` handler
+    videoRef.current.srcObject = stream;
+
+    peerConnection.current = createPeerConnection();
     stream.getTracks().forEach((track) => {
       peerConnection.current.addTrack(track, stream);
     });
-  
-    await peerConnection.current.setRemoteDescription(offer.offer);
+
+    await peerConnection.current.setRemoteDescription(data.offer);
     const answer = await peerConnection.current.createAnswer();
     await peerConnection.current.setLocalDescription(answer);
-  
+
     socket.emit("make-answer", {
-      to: offer.from,
+      to: data.from,
       from: senderId,
       answer,
     });
   };
-  
-
 
   const handleDisconnect = () => {
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      setLocalStream(null);
-    }
+    localStream?.getTracks().forEach((track) => track.stop());
+    remoteStream?.getTracks().forEach((track) => track.stop());
 
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((track) => track.stop());
-      setRemoteStream(null);
-    }
-
-    if (videoRef.current) videoRef.current.srcObject = null;
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    videoRef.current.srcObject = null;
+    remoteVideoRef.current.srcObject = null;
 
     peerConnection.current?.close();
     peerConnection.current = null;
@@ -218,26 +208,24 @@ const MessageContainer = ({ selectedUser, socket }) => {
     socket.emit("end-call", { to: selectedUser._id });
   };
 
-  // Signaling
+  // Signaling listeners
   useEffect(() => {
     socket.on("incoming-call", (data) => {
       const accept = window.confirm(
         `Incoming ${data.isVideo ? "video" : "voice"} call from ${data.fromName}`
       );
-      if (accept) {
-        handleCallAnswer(data);
-      }
+      if (accept) handleCallAnswer(data);
     });
 
     socket.on("call-answer", async (data) => {
-      await peerConnection.current.setRemoteDescription(data.answer);
+      await peerConnection.current?.setRemoteDescription(data.answer);
     });
 
     socket.on("ice-candidate", async (data) => {
       try {
-        await peerConnection.current.addIceCandidate(data.candidate);
-      } catch (error) {
-        console.error("Error adding received ice candidate", error);
+        await peerConnection.current?.addIceCandidate(data.candidate);
+      } catch (err) {
+        console.error("ICE candidate error", err);
       }
     });
 
@@ -348,28 +336,30 @@ const MessageContainer = ({ selectedUser, socket }) => {
 
       {/* Call UI */}
       {isCalling && (
-  <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50">
-    <div className="bg-white p-4 rounded-xl shadow-lg flex flex-col items-center space-y-3">
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        className="w-72 h-40 rounded-lg border border-blue-500"
-      />
-      {isVideoCall && (
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          className="w-72 h-40 rounded-lg border border-green-500"
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50">
+          <div className="bg-white p-4 rounded-xl shadow-lg flex flex-col items-center space-y-3">
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              className="w-72 h-40 rounded-lg border border-blue-500"
+            />
+            {isVideoCall && (
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                className="w-72 h-40 rounded-lg border border-green-500"
+              />
+            )}
+            <button
+              onClick={handleDisconnect}
+              className="mt-2 px-4 py-2 bg-red-500 text-white rounded-md"
+            >
+              End Call
+            </button>
+          </div>
+        </div>
       )}
-      <button onClick={handleDisconnect} className="btn btn-error mt-4">
-        End Call
-      </button>
-    </div>
-  </div>
-)}
-
     </div>
   );
 };
