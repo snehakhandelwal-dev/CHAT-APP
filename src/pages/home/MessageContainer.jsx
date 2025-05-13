@@ -132,7 +132,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
     };
   
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
+      if (event.candidate && selectedUser && selectedUser._id) {
         socket.emit("ice-candidate", {
           to: selectedUser._id,
           from: senderId,
@@ -140,6 +140,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
         });
       }
     };
+    
   
     return pc;
   };
@@ -231,7 +232,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
     socket.on("incoming-call", (data) => {
       console.log("Incoming call:", data);
       const accept = window.confirm(
-        `Incoming ${data.isVideo ? "video" : "voice"} call from ${selectedUser.fromName}`
+        `Incoming ${data.isVideo ? "video" : "voice"} call from ${selectedUser.fullName}`
       );
       if (accept) handleCallAnswer(data);
     });
