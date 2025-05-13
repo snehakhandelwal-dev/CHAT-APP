@@ -123,32 +123,24 @@ const MessageContainer = ({ selectedUser, socket }) => {
     });
   
     const incomingStream = new MediaStream();
-    // setRemoteStream(incomingStream);
-    // remoteVideoRef.current.srcObject = incomingStream;
+    setRemoteStream(incomingStream);
+    remoteVideoRef.current.srcObject = incomingStream;
   
     pc.ontrack = (event) => {
       console.log("Adding remote track", event.track);
       incomingStream.addTrack(event.track);
-    
-      // 🔥 Set only when tracks are present and ref is ready
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = incomingStream;
-      }
-    
-      setRemoteStream(incomingStream); // update state after track
     };
-    
   
     pc.onicecandidate = (event) => {
-      if (event.candidate && selectedUser?._id) {
-        socket.emit("ice-candidate", {
-          to: selectedUser._id,
-          from: senderId,
-          candidate: event.candidate,
-        });
-      }
-    };
-    
+  if (event.candidate && selectedUser?._id) {
+    socket.emit("ice-candidate", {
+      to: selectedUser._id,
+      from: senderId,
+      candidate: event.candidate,
+    });
+  }
+};
+
   
     return pc;
   };
