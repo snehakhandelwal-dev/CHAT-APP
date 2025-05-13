@@ -6,6 +6,8 @@ import { FaVideo, FaPhoneAlt } from "react-icons/fa";
 const API_URL = import.meta.env.VITE_API_URL;
 
 const MessageContainer = ({ selectedUser, socket }) => {
+  console.log("Component Rendered");
+
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [typingPreview, setTypingPreview] = useState("");
@@ -23,12 +25,17 @@ const MessageContainer = ({ selectedUser, socket }) => {
   const senderData = JSON.parse(localStorage.getItem("userData") || "{}");
   const senderId = senderData?.user?._id;
 
+  console.log("Selected User:", selectedUser);
+  console.log("Sender ID:", senderId);
+
   useEffect(() => {
     if (!selectedUser) return;
+    console.log("Fetching previous messages...");
 
     const fetchMessages = async () => {
       try {
         const response = await axios.get(`${API_URL}getMessage/${senderId}/${selectedUser._id}`);
+        console.log("Fetched Messages:", response.data.responseData);
         setMessages(response.data.responseData);
       } catch (error) {
         console.error("Error fetching messages:", error);
@@ -41,7 +48,10 @@ const MessageContainer = ({ selectedUser, socket }) => {
   useEffect(() => {
     if (!socket || !selectedUser) return;
 
+    console.log("Setting up receive-message socket listener");
+
     const handleReceive = (msg) => {
+      console.log("Received Message:", msg);
       if (msg.senderId === selectedUser._id || msg.receiverId === selectedUser._id) {
         setMessages((prev) => [...prev, msg]);
       }
@@ -54,7 +64,10 @@ const MessageContainer = ({ selectedUser, socket }) => {
   useEffect(() => {
     if (!socket || !selectedUser) return;
 
+    console.log("Setting up typing socket listener");
+
     const handleTyping = ({ from, content }) => {
+      console.log("Typing from:", from, "Content:", content);
       if (from === selectedUser._id) {
         setTypingPreview(content);
       }
@@ -67,7 +80,13 @@ const MessageContainer = ({ selectedUser, socket }) => {
   useEffect(() => {
     if (!typingPreview) return;
 
-    const timeout = setTimeout(() => setTypingPreview(""), 2000);
+    console.log("Typing Preview Set:", typingPreview);
+
+    const timeout = setTimeout(() => {
+      console.log("Clearing typing preview");
+      setTypingPreview("");
+    }, 2000);
+
     return () => clearTimeout(timeout);
   }, [typingPreview]);
 
@@ -77,6 +96,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
 
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
+    console.log("Sending message:", newMessage);
 
     try {
       const response = await axios.post(
@@ -84,6 +104,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
         { message: newMessage }
       );
       const newMsg = response.data.responseData.newMessage;
+      console.log("Message sent:", newMsg);
       setMessages((prev) => [...prev, newMsg]);
       socket.emit("send-message", {
         ...newMsg,
@@ -100,13 +121,16 @@ const MessageContainer = ({ selectedUser, socket }) => {
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
-
+  
     const incomingStream = new MediaStream();
     setRemoteStream(incomingStream);
     remoteVideoRef.current.srcObject = incomingStream;
-
-    pc.ontrack = (event) => incomingStream.addTrack(event.track);
-
+  
+    pc.ontrack = (event) => {
+      console.log("Adding remote track", event.track);
+      incomingStream.addTrack(event.track);
+    };
+  
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit("ice-candidate", {
@@ -116,11 +140,13 @@ const MessageContainer = ({ selectedUser, socket }) => {
         });
       }
     };
-
+  
     return pc;
   };
+  
 
   const startCall = async (isVideo) => {
+    console.log("Starting call, isVideo:", isVideo);
     setIsVideoCall(isVideo);
     setIsCalling(true);
 
@@ -129,16 +155,19 @@ const MessageContainer = ({ selectedUser, socket }) => {
       audio: true,
     });
 
+    console.log("Got local stream:", stream);
     setLocalStream(stream);
     videoRef.current.srcObject = stream;
 
     peerConnection.current = createPeerConnection();
 
-    stream.getTracks().forEach((track) =>
-      peerConnection.current.addTrack(track, stream)
-    );
+    stream.getTracks().forEach((track) => {
+      peerConnection.current.addTrack(track, stream);
+    });
 
     const offer = await peerConnection.current.createOffer();
+    console.log("Created offer:", offer);
+
     await peerConnection.current.setLocalDescription(offer);
 
     socket.emit("call-user", {
@@ -151,6 +180,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
   };
 
   const handleCallAnswer = async (data) => {
+    console.log("Answering call:", data);
     setIsCalling(true);
     setIsVideoCall(data.isVideo);
 
@@ -179,6 +209,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
   };
 
   const handleDisconnect = () => {
+    console.log("Disconnecting call...");
     localStream?.getTracks().forEach((track) => track.stop());
     remoteStream?.getTracks().forEach((track) => track.stop());
 
@@ -191,14 +222,14 @@ const MessageContainer = ({ selectedUser, socket }) => {
     setIsCalling(false);
     setIsVideoCall(false);
 
-    // ✅ Defensive check
-    if (selectedUser?._id) {
-      socket.emit("end-call", { to: selectedUser._id });
-    }
+    socket.emit("end-call", { to: selectedUser._id });
   };
 
   useEffect(() => {
+    console.log("Setting up signaling listeners");
+
     socket.on("incoming-call", (data) => {
+      console.log("Incoming call:", data);
       const accept = window.confirm(
         `Incoming ${data.isVideo ? "video" : "voice"} call from ${data.fromName}`
       );
@@ -206,10 +237,12 @@ const MessageContainer = ({ selectedUser, socket }) => {
     });
 
     socket.on("call-answer", async (data) => {
+      console.log("Received call answer:", data);
       await peerConnection.current?.setRemoteDescription(data.answer);
     });
 
     socket.on("ice-candidate", async (data) => {
+      console.log("Received ICE candidate:", data);
       try {
         await peerConnection.current?.addIceCandidate(data.candidate);
       } catch (err) {
@@ -217,7 +250,10 @@ const MessageContainer = ({ selectedUser, socket }) => {
       }
     });
 
-    socket.on("call-ended", () => handleDisconnect());
+    socket.on("call-ended", () => {
+      console.log("Call ended by other user");
+      handleDisconnect();
+    });
 
     return () => {
       socket.off("incoming-call");
@@ -225,7 +261,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
       socket.off("ice-candidate");
       socket.off("call-ended");
     };
-  }, [socket, selectedUser]);
+  }, [socket]);
 
   if (!selectedUser) {
     return (
