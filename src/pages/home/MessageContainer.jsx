@@ -118,25 +118,20 @@ const MessageContainer = ({ selectedUser, socket }) => {
   };
 
   const createPeerConnection = () => {
-    console.log("Creating RTCPeerConnection");
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
-
+  
     const incomingStream = new MediaStream();
     setRemoteStream(incomingStream);
-
+    remoteVideoRef.current.srcObject = incomingStream;
+  
     pc.ontrack = (event) => {
-      console.log("On Track Event:", event);
-      if (event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
-      } else {
-        incomingStream.addTrack(event.track);
-      }
+      console.log("Adding remote track", event.track);
+      incomingStream.addTrack(event.track);
     };
-
+  
     pc.onicecandidate = (event) => {
-      console.log("ICE Candidate:", event.candidate);
       if (event.candidate) {
         socket.emit("ice-candidate", {
           to: selectedUser._id,
@@ -145,9 +140,10 @@ const MessageContainer = ({ selectedUser, socket }) => {
         });
       }
     };
-
+  
     return pc;
   };
+  
 
   const startCall = async (isVideo) => {
     console.log("Starting call, isVideo:", isVideo);
