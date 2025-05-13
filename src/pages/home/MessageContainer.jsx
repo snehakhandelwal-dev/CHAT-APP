@@ -231,7 +231,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
     socket.on("incoming-call", (data) => {
       console.log("Incoming call:", data);
       const accept = window.confirm(
-        `Incoming ${data.isVideo ? "video" : "voice"} call from ${data.fromName}`
+        `Incoming ${data.isVideo ? "video" : "voice"} call from ${senderData.user?.fullName}`
       );
       if (accept) handleCallAnswer(data);
     });
