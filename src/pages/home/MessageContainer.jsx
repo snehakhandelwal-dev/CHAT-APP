@@ -132,7 +132,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
     };
   
     pc.onicecandidate = (event) => {
-      if (event.candidate && selectedUser && selectedUser._id) {
+      if (event.candidate) {
         socket.emit("ice-candidate", {
           to: selectedUser._id,
           from: senderId,
@@ -140,7 +140,6 @@ const MessageContainer = ({ selectedUser, socket }) => {
         });
       }
     };
-    
   
     return pc;
   };
