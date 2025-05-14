@@ -118,19 +118,23 @@ const MessageContainer = ({ selectedUser, socket }) => {
   };
 
   const createPeerConnection = () => {
+    console.log("Creating peer connection");
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
-  
+
     const incomingStream = new MediaStream();
     setRemoteStream(incomingStream);
-    remoteVideoRef.current.srcObject = incomingStream;
-  
+    remoteVideoRef.current.srcObject = incomingStream;  // Make sure this is set
+
     pc.ontrack = (event) => {
       console.log("Adding remote track", event.track);
       incomingStream.addTrack(event.track);
+      if (event.track.kind === "video") {
+        console.log("Remote video track added", event.track);
+      }
     };
-  
+
     pc.onicecandidate = (event) => {
       if (event.candidate && selectedUser && selectedUser._id) {
         socket.emit("ice-candidate", {
@@ -140,11 +144,9 @@ const MessageContainer = ({ selectedUser, socket }) => {
         });
       }
     };
-    
-  
+
     return pc;
   };
-  
 
   const startCall = async (isVideo) => {
     console.log("Starting call, isVideo:", isVideo);
@@ -163,6 +165,7 @@ const MessageContainer = ({ selectedUser, socket }) => {
     peerConnection.current = createPeerConnection();
 
     stream.getTracks().forEach((track) => {
+      console.log("Adding local track:", track);
       peerConnection.current.addTrack(track, stream);
     });
 
@@ -195,11 +198,13 @@ const MessageContainer = ({ selectedUser, socket }) => {
 
     peerConnection.current = createPeerConnection();
     stream.getTracks().forEach((track) => {
+      console.log("Adding local track:", track);
       peerConnection.current.addTrack(track, stream);
     });
 
     await peerConnection.current.setRemoteDescription(data.offer);
     const answer = await peerConnection.current.createAnswer();
+    console.log("Sending answer:", answer);
     await peerConnection.current.setLocalDescription(answer);
 
     socket.emit("make-answer", {
@@ -305,78 +310,66 @@ const MessageContainer = ({ selectedUser, socket }) => {
 
       {/* Messages */}
       <div className="h-full overflow-y-auto p-3">
-        {messages.length > 0 ? (
-          messages.map((msg) => (
+        {messages.map((message, index) => (
+          <div
+            key={index}
+            className={`flex gap-3 ${
+              message.senderId === senderId ? "justify-end" : "justify-start"
+            }`}
+          >
             <div
-              key={msg._id}
-              className={`chat ${msg.senderId === senderId ? "chat-end" : "chat-start"}`}
+              className={`p-2 rounded-xl max-w-[70%] ${
+                message.senderId === senderId
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-300 text-gray-700"
+              }`}
             >
-              <div className="chat-header">
-                {msg.senderId === senderId ? "You" : selectedUser.fullName}
-                <time className="text-xs opacity-50 ml-2">
-                  {new Date(msg.createdAt).toLocaleTimeString()}
-                </time>
-              </div>
-              <div className="chat-bubble">{msg.message}</div>
+              {message.content}
             </div>
-          ))
-        ) : (
-          <p className="text-center text-gray-400">No messages yet.</p>
-        )}
-        {typingPreview && (
-          <div className="chat chat-start">
-            <div className="chat-header">{selectedUser.fullName}</div>
-            <div className="chat-bubble text-gray-400 italic">{typingPreview}</div>
           </div>
+        ))}
+        {typingPreview && (
+          <div className="text-gray-500 italic text-sm">{typingPreview} is typing...</div>
         )}
         <div ref={bottomRef} />
       </div>
 
       {/* Input */}
-      <div className="w-full p-3 flex gap-2">
+      <div className="px-3 py-2 bg-[#f0f2f5] flex gap-2 items-center">
         <input
           type="text"
-          placeholder="Type here..."
-          className="input input-bordered input-primary w-full"
+          placeholder="Type a message..."
+          className="flex-1 p-2 rounded-xl"
           value={newMessage}
-          onChange={(e) => {
-            setNewMessage(e.target.value);
-            socket.emit("typing", {
-              to: selectedUser._id,
-              from: senderId,
-              content: e.target.value,
-            });
-          }}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          onChange={(e) => setNewMessage(e.target.value)}
+          onKeyUp={() => socket.emit("typing", { to: selectedUser._id, content: newMessage })}
         />
-        <button
-          className="btn btn-square btn-outline btn-primary"
-          onClick={sendMessage}
-        >
-          <IoMdSend />
+        <button className="p-2 rounded-full bg-blue-500 text-white" onClick={sendMessage}>
+          <IoMdSend size={20} />
         </button>
       </div>
 
-      {/* Call UI */}
+      {/* Video Call */}
       {isCalling && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50">
-          <div className="bg-white p-4 rounded-xl shadow-lg flex flex-col items-center space-y-3">
+        <div className="fixed top-0 left-0 w-screen h-screen bg-black bg-opacity-70 z-50 flex items-center justify-center">
+          <div className="relative w-full h-full flex items-center justify-center">
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute top-0 left-0 w-full h-full object-cover"
+            />
             <video
               ref={videoRef}
               autoPlay
+              playsInline
               muted
-              className="w-72 h-40 rounded-lg border border-blue-500"
+              className="w-[300px] h-[300px] rounded-full border-4 border-white"
             />
-            {isVideoCall && (
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                className="w-72 h-40 rounded-lg border border-green-500"
-              />
-            )}
             <button
+              className="absolute top-3 right-3 p-3 bg-red-500 rounded-full text-white"
               onClick={handleDisconnect}
-              className="mt-2 px-4 py-2 bg-red-500 text-white rounded-md"
             >
               End Call
             </button>
